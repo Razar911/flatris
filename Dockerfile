@@ -1,5 +1,6 @@
 FROM node
 
+#make directory
 RUN mkdir /app
 WORKDIR /app
 
