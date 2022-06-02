@@ -15,6 +15,7 @@ RUN yarn install
 RUN yarn build
 
 EXPOSE 3000
+#Some changes
 
 #start game
 CMD yarn start
