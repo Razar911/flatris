@@ -1,4 +1,4 @@
-FROM node
+FROM node:12
 
 #make directory
 RUN mkdir /app
@@ -14,7 +14,7 @@ RUN yarn install
 #RUN yarn test
 RUN yarn build
 
+EXPOSE 3000
+
 #start game
 CMD yarn start
-
-EXPOSE 3000
