@@ -3,6 +3,6 @@ version: '3'
 #Add comment
 services:
   flatris:
-    build: .
+    image: dockerbarabash/flatris-test:latest
     ports:
     - "3000:3000"
