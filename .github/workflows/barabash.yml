@@ -1,0 +1,62 @@
+name: barabash-deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag, that will be built and uploaded'
+        required: true
+        default: 'dev1'
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+    env:
+      SRV_CONTAINER_NAME: vapanda-api
+      SRV_IMAGE_NAME: vapanda-api
+      SRV_FRONTEND_PORT: 80
+      SRV_FRONTEND_PORT_SSL: 443
+      DB_ADDRESS: vp-prod-api.bapanda.com
+      HOST: vp-prod-api.bapanda.com
+      REDIS_HOST: vp-prod-api.bapanda.com
+      RT_SERVER: vp-prod-api.bapanda.com
+      RT_PORT: 3355
+      DOCKER_FILE: vapanda-api.Dockerfile
+
+    steps:
+      - name: Setup build environment
+        uses: actions/checkout@v2
+      - name: Build the Docker image and Push
+        run: |
+          cp ./.devops/${{ env.DOCKER_FILE }} ./${{ env.DOCKER_FILE }}
+          docker build -f ${{ env.DOCKER_FILE }} -t ${{ secrets.DOCKER_LOGIN }}/${{ env.SRV_IMAGE_NAME }}:${{ github.event.inputs.tag }} .
+          docker login -u ${{ secrets.DOCKER_LOGIN }} -p ${{ secrets.DOCKER_PASSWORD }}
+          docker image push ${{ secrets.DOCKER_LOGIN }}/${{ env.SRV_IMAGE_NAME }}:${{ github.event.inputs.tag }}
+      - name: Deploy server
+        uses: matheusvanzan/sshpass-action@v2
+        with:
+          host: ${{ env.HOST }}
+          user: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_KEY }}
+          run: |
+            docker container rm ${{ env.SRV_CONTAINER_NAME }} -f
+            docker image rm ${{ secrets.DOCKER_LOGIN }}/${{ env.SRV_IMAGE_NAME }}:${{ github.event.inputs.tag }}
+            docker images | grep ${{ env.SRV_IMAGE_NAME }} | tr -s ' ' | cut -d ' ' -f 2 | xargs -I {} docker rmi ${{ secrets.DOCKER_LOGIN }}/${{ env.SRV_IMAGE_NAME }}:{}
+            docker run -d -p ${{ env.SRV_FRONTEND_PORT }}:${{ env.SRV_FRONTEND_PORT }} \
+              -p ${{ env.SRV_FRONTEND_PORT_SSL }}:${{ env.SRV_FRONTEND_PORT_SSL }} \
+              --env DB_NAME="${{secrets.DB_NAME}}" \
+              --env DB_PASSWORD="${{secrets.DB_PASSWORD}}" \
+              --env DB_PORT=${{secrets.DB_PORT}} \
+              --env DB_USER="${{secrets.DB_USER}}" \
+              --env DB_ADDRESS="${{env.DB_ADDRESS}}" \
+              --env REDIS_HOST="${{env.REDIS_HOST}}" \
+              --env REDIS_PASSWORD="${{secrets.REDIS_PASSWORD}}" \
+              --env VERSION=${{ github.event.inputs.tag }}#${{ github.run_number }} \
+              --env RT_SERVER="${{env.RT_SERVER}}" \
+              --env RT_PORT="${{env.RT_PORT}}" \
+              --env NODE_RUN="true" \
+              --env SSL="true" \
+              --restart always \
+              --name ${{ env.SRV_CONTAINER_NAME }} ${{ secrets.DOCKER_LOGIN }}/${{ env.SRV_IMAGE_NAME }}:${{ github.event.inputs.tag }}
